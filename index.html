@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escape Room Mainboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        h1 {
+            color: #333;
+            font-size: 28px;
+            margin-top: 20px;
+        }
+        #timer {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 24px;
+            color: #d9534f;
+            font-weight: bold;
+        }
+        #start-button {
+            margin-top: 30px;
+            padding: 15px 30px;
+            font-size: 20px;
+            background-color: #0275d8;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        #start-button:hover {
+            background-color: #025aa5;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+        }
+        .modal-content {
+            text-align: center;
+        }
+        button.opcion {
+            display: block;
+            margin: 10px auto;
+            padding: 10px;
+            background-color: #0275d8;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .componentes-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 30px;
+            max-width: 90%;
+        }
+        .componente {
+            width: 180px;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 15px;
+            cursor: pointer;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            transition: transform 0.3s ease, background-color 0.3s ease;
+            box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.2);
+        }
+        .componente:hover {
+            transform: scale(1.1);
+        }
+        .naranja {
+            background-color: orange;
+        }
+        .verde {
+            background-color: green;
+        }
+        .bloqueado {
+            pointer-events: none;
+            opacity: 0.6;
+        }
+        .mensaje-penalizacion {
+            position: absolute;
+            top: 50px;
+            right: 20px;
+            font-size: 20px;
+            color: red;
+            font-weight: bold;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>¡Bienvenido al Escape Room de la Mainboard!</h1>
+    <div id="timer">Tiempo: 5:00</div>
+    <button id="start-button" onclick="iniciarJuego()">Empezar Juego</button>
+    <div id="mensaje-penalizacion" class="mensaje-penalizacion">-40s</div>
+    <div class="componentes-container" id="componentes" style="display: none;">
+        <div class="componente naranja" data-componente="socket_cpu" onclick="mostrarAcertijos('socket_cpu')">Socket del CPU</div>
+        <div class="componente naranja" data-componente="ram" onclick="mostrarAcertijos('ram')">Ranuras de Memoria RAM</div>
+        <div class="componente naranja" data-componente="pci" onclick="mostrarAcertijos('pci')">Ranuras PCIe</div>
+        <div class="componente naranja" data-componente="chipset" onclick="mostrarAcertijos('chipset')">Chipset</div>
+    </div>
+    <div id="modalAcertijo" class="modal">
+        <div class="modal-content">
+            <p id="preguntaTexto"></p>
+            <div id="opcionesContainer"></div>
+        </div>
+    </div>    
+    <script>
+        let tiempoRestante = 300;
+        let temporizador;
+        let juegoIniciado = false;
+        let componentesCompletados = 0;
+        const acertijos = {
+            socket_cpu: [
+                { pregunta: "¿Qué componente se conecta al socket del CPU?", opciones: ["RAM", "CPU", "GPU"], respuesta: "CPU" },
+                { pregunta: "¿Qué tipo de socket usa Intel?", opciones: ["PGA", "LGA", "BGA"], respuesta: "LGA" },
+                { pregunta: "¿Qué función cumple el socket?", opciones: ["Almacenar", "Conectar", "Procesar"], respuesta: "Conectar" }
+            ],
+            ram: [
+                { pregunta: "¿Qué significa RAM?", opciones: ["Memoria", "Procesador", "Almacenamiento"], respuesta: "Memoria" },
+                { pregunta: "¿Qué tipo de ranura usa la RAM?", opciones: ["DIMM", "SIMM", "RIMM"], respuesta: "DIMM" },
+                { pregunta: "¿Qué características define la RAM?", opciones: ["Volátil", "Permanente", "Lenta"], respuesta: "Volátil" }
+            ],
+            pci: [
+                { pregunta: "¿Qué tipo de tarjetas se pueden conectar en una ranura PCIe?", opciones: ["Tarjetas de red", "Tarjetas gráficas", "Tarjetas de sonido"], respuesta: "Tarjetas gráficas" },
+                { pregunta: "¿Cuál es una ventaja de PCIe sobre PCI tradicional?", opciones: ["Mayor velocidad de transferencia", "Menos consumo de energía", "Más compatibilidad con sistemas antiguos"], respuesta: "Mayor velocidad de transferencia" },
+                { pregunta: "¿Cómo se diferencian las ranuras PCIe en la placa base?", opciones: ["Por su longitud y cantidad de carriles", "Por su color", "Por la cantidad de pines"], respuesta: "Por su longitud y cantidad de carriles" }
+            ],
+            chipset: [
+            { pregunta: "¿Qué tipo de funciones administra el chipset en la motherboard?", opciones: ["Transferencia de datos", "Procesamiento gráfico", "Administración del sistema operativo"], respuesta: "Transferencia de datos" },
+            { pregunta: "¿En qué se divide normalmente el chipset en las placas modernas?", opciones: ["Chipset norte y sur", "Chipset este y oeste", "Chipset primario y secundario"], respuesta: "Chipset norte y sur" },
+            { pregunta: "¿Qué determina el chipset en una computadora?", opciones: ["Compatibilidad de procesadores y memorias", "Capacidad del disco duro", "Velocidad del ventilador"], respuesta: "Compatibilidad de procesadores y memorias" }
+            ]
+        };
+        function iniciarJuego() {
+            if (!juegoIniciado) {
+                juegoIniciado = true;
+                document.getElementById("start-button").style.display = "none";
+                document.getElementById("componentes").style.display = "flex";
+                iniciarTemporizador();
+            }
+        }
+        function iniciarTemporizador() {
+            temporizador = setInterval(() => {
+                tiempoRestante--;
+                actualizarTemporizador();
+                if (tiempoRestante <= 0) {
+                    clearInterval(temporizador);
+                    alert("¡Se acabó el tiempo! El virus ha infectado la mainboard.");
+                    location.reload();
+                }
+            }, 1000);
+        }
+        function actualizarTemporizador() {
+            const minutos = Math.floor(tiempoRestante / 60);
+            const segundos = tiempoRestante % 60;
+            document.getElementById("timer").textContent = `Tiempo: ${minutos}:${segundos < 10 ? '0' : ''}${segundos}`;
+        }
+        function verificarVictoria() {
+            if (componentesCompletados === 4) {
+                clearInterval(temporizador);
+                setTimeout(() => {
+                    alert("¡Victoria! Se ha derrotado al virus.");
+                    setTimeout(() => {
+                        location.reload();
+                    }, 3000);
+                }, 500);
+            }
+        }
+        function mostrarAcertijos(componente) {
+    let preguntas = acertijos[componente];
+    let index = 0;
+
+        function preguntar() {
+            if (index >= preguntas.length) {
+                document.querySelector(`[data-componente="${componente}"]`).classList.remove("naranja");
+                document.querySelector(`[data-componente="${componente}"]`).classList.add("verde", "bloqueado");
+                componentesCompletados++;
+                verificarVictoria();
+                cerrarModal();
+                return;
+            }
+
+            let preguntaActual = preguntas[index];
+            let opciones = [...preguntaActual.opciones].sort(() => Math.random() - 0.5);
+
+            document.getElementById("preguntaTexto").textContent = preguntaActual.pregunta;
+            let opcionesContainer = document.getElementById("opcionesContainer");
+            opcionesContainer.innerHTML = "";
+
+            opciones.forEach(opcion => {
+                let boton = document.createElement("button");
+                boton.classList.add("opcion");
+                boton.textContent = opcion;
+                boton.onclick = () => {
+                    if (opcion === preguntaActual.respuesta) {
+                        index++;
+                        preguntar();
+                    } else {
+                        document.getElementById("mensaje-penalizacion").style.display = "block";
+                        tiempoRestante -= 40;
+                        setTimeout(() => {
+                            document.getElementById("mensaje-penalizacion").style.display = "none";
+                        }, 1000);
+                    }
+                };
+                opcionesContainer.appendChild(boton);
+            });
+
+            document.getElementById("modalAcertijo").style.display = "block";
+        }
+
+        function cerrarModal() {
+            document.getElementById("modalAcertijo").style.display = "none";
+        }
+
+        preguntar();
+    }
+    </script>
+</body>
+</html>
